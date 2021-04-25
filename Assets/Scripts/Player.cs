@@ -22,6 +22,7 @@ public class Player : MonoBehaviour
     private Surroundings surr;
     private float h;
     private bool jumpReady = true;
+    private bool extraJumpReady = true;
     // Start is called before the first frame update
     void Start()
     {
@@ -29,31 +30,29 @@ public class Player : MonoBehaviour
         surr = transform.GetChild(0).gameObject.GetComponent<Surroundings>();
         SetUpEvent(OnHit);
         SetUpEvent(OnFlip);
+        Flip();
+        StartCoroutine(ResetJump());
     }
 
     // Update is called once per frame
     void Update()
     {
-        h = Input.GetAxis("Horizontal");
-        /*if (ShouldMove())
+        if((Input.GetKeyDown(KeyCode.Space) || Input.touchCount > 0) && (jumpReady || extraJumpReady) )
         {
-            float calcSpeed = Mathf.Clamp(rb.velocity.y * -1 * speed, striveSpeed.x, striveSpeed.y);
-            rb.velocity = new Vector2(h * calcSpeed * Time.deltaTime, rb.velocity.y);
-        }*/
-        if((Input.GetKeyDown(KeyCode.Space) || Input.touchCount > 0) && jumpReady )
-        {
-            Flip();
+            Jump();
         }
+    }
+
+    public Vector3 GetVelocity()
+    {
+        return rb.velocity;
     }
 
     private void OnCollisionEnter(Collision collision)
     {
         if (collision.gameObject.tag == "Obstacle")
         {
-            Debug.Log("Death");
-            OnHit.Invoke();
-            UIManager._instance.Hit();
-            Flip();
+            Hit();
         }
     }
 
@@ -62,51 +61,60 @@ public class Player : MonoBehaviour
         rb.angularVelocity = new Vector3(rb.angularVelocity.x, rb.angularVelocity.y - h, rb.angularVelocity.z);
         // clamp position
         float clampedX = Mathf.Clamp(transform.position.x, xBounds.x, xBounds.y);
-        if (clampedX != transform.position.x) transform.position = new Vector3(clampedX, transform.position.y, transform.position.z);
+        if (clampedX != transform.position.x)
+        {
+            transform.position = new Vector3(clampedX, transform.position.y, transform.position.z);
+            Hit();
+        }
 
         //clamp speed
         float clampedVelocity = Mathf.Clamp(rb.velocity.y, terminalVelocity, 100);
         rb.velocity = new Vector3(rb.velocity.x, clampedVelocity, rb.velocity.z);
     }
 
+    private void Jump()
+    {
+        Flip();
+        OnFlip.Invoke();
+        if (extraJumpReady && !jumpReady) StartCoroutine(ResetExtraJump());
+        if (jumpReady) StartCoroutine(ResetJump());
+    }
+
+    private void Hit()
+    {
+        OnHit.Invoke();
+        UIManager._instance.Hit();
+        Flip();
+    }
+
     private void Flip()
     {
         rb.velocity = new Vector2(0, 0);
-        Vector3 dir = -surr.DirectionToNearestObject();
-        if (dir == Vector3.zero)
-        {
-            dir = transform.position - new Vector3(0, transform.position.y, 0);
-        }
+        Vector3 dir = surr.DirectionToNearestObject();
 
         if (dir.x > -1 && dir.x < 1)
         {
             if(dir.x < 0) dir = new Vector3(-1f * 3, dir.y, dir.z);
             if(dir.x >= 0) dir = new Vector3(1f * 3, dir.y, dir.z);
         }
-        rb.AddForce(dir.normalized * -jumpStrength);
+        rb.AddForce(-dir.normalized * -jumpStrength);
         rb.angularVelocity = new Vector3(Random.Range(30, maxAngularVelocity.x),
                                                     rb.angularVelocity.y,
                                                     Random.Range(30, maxAngularVelocity.z)); //Jump spin
-        jumpReady = false;
-        OnFlip.Invoke();
-        StartCoroutine(ResetJump());
     }
 
     private IEnumerator ResetJump()
     {
+        jumpReady = false;
         yield return new WaitForSeconds(jumpCooldown);
         jumpReady = true;
     }
 
-    private bool ShouldMove()
+    private IEnumerator ResetExtraJump()
     {
-        if(Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.D) || 
-            Input.GetKey(KeyCode.LeftArrow) || Input.GetKey(KeyCode.RightArrow))
-        {
-            return true;
-        }
-
-        return false;
+        extraJumpReady = false;
+        yield return new WaitForSeconds(jumpCooldown);
+        extraJumpReady = true;
     }
 
     public static void SetUpEvent(UnityEvent e)
